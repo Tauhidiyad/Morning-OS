@@ -200,8 +200,6 @@
 <div class="login-wrap">
   <div class="login-card">
 
-    <div class="login-corner">Private</div>
-
     <div class="login-logo">
       <span class="login-title">Morning OS</span>
       <svg width="26" height="26" viewBox="0 0 26 26" fill="none" style="display:inline-block;vertical-align:middle;margin-left:2px;margin-bottom:-3px;flex-shrink:0;">
@@ -230,7 +228,7 @@
 
     <div class="error-msg" id="errorMsg"></div>
 
-    <p class="login-footnote">Private by default · Access restricted</p>
+    <p class="login-footnote" style="margin-top:24px; color: var(--muted);">Private by default</p>
 
   </div>
 
@@ -239,7 +237,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged }
+  import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
   const ALLOWED_EMAIL = "Tauhidiyad@gmail.com";
@@ -264,11 +262,28 @@
     }
   });
 
+  // Handle result when user comes back after Google redirect
+  getRedirectResult(auth).then((result) => {
+    if (!result) return;
+    const email = result.user.email;
+    if (email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
+      window.location.href = "/Morning-OS/Morning-Os_Firebase_Final.html";
+    } else {
+      auth.signOut();
+      showError("Access denied. This app is private.");
+    }
+  }).catch((err) => {
+    if (err.code !== "auth/no-auth-event") {
+      showError("Sign-in failed. Please try again.");
+      console.error(err);
+    }
+  });
+
   window.signInWithGoogle = async function () {
-    const btn     = document.getElementById("googleBtn");
+    const btn    = document.getElementById("googleBtn");
     const spinner = document.getElementById("spinner");
-    const icon    = document.getElementById("googleIcon");
-    const errBox  = document.getElementById("errorMsg");
+    const icon   = document.getElementById("googleIcon");
+    const errBox = document.getElementById("errorMsg");
 
     btn.disabled          = true;
     spinner.style.display = "block";
@@ -276,23 +291,11 @@
     errBox.style.display  = "none";
 
     try {
-      const result = await signInWithPopup(auth, provider);
-      const email  = result.user.email;
-
-      if (email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
-        window.location.href = "/Morning-OS/Morning-Os_Firebase_Final.html";
-      } else {
-        await auth.signOut();
-        showError("Access denied. This app is private.");
-      }
+      await signInWithRedirect(auth, provider);
+      // Page will redirect to Google — no code runs after this
     } catch (err) {
-      if (err.code === "auth/popup-closed-by-user") {
-        showError("Sign-in cancelled. Please try again.");
-      } else {
-        showError("Sign-in failed. Please try again.");
-      }
+      showError("Sign-in failed. Please try again.");
       console.error(err);
-    } finally {
       btn.disabled          = false;
       spinner.style.display = "none";
       icon.style.display    = "block";
