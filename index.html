@@ -237,10 +237,11 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged }
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
   const ALLOWED_EMAIL = "Tauhidiyad@gmail.com";
+  const MAIN_PAGE     = "https://tauhidiyad.github.io/Morning-OS/Morning-Os_Firebase_Final.html";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBut2P7iYJM9WNJyTLY7VlRyc-B9ScKOlk",
@@ -255,46 +256,32 @@
   const auth     = getAuth(app);
   const provider = new GoogleAuthProvider();
 
-  // If already signed in as the right person, skip straight to app
+  // If already signed in as the right person, go straight to app
   onAuthStateChanged(auth, (user) => {
-    if (user && user.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
-      window.location.href = "/Morning-OS/Morning-Os_Firebase_Final.html";
-    }
-  });
-
-  // Handle result when user comes back after Google redirect
-  getRedirectResult(auth).then((result) => {
-    if (!result) return;
-    const email = result.user.email;
-    if (email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
-      window.location.href = "/Morning-OS/Morning-Os_Firebase_Final.html";
-    } else {
-      auth.signOut();
-      showError("Access denied. This app is private.");
-    }
-  }).catch((err) => {
-    if (err.code !== "auth/no-auth-event") {
-      showError("Sign-in failed. Please try again.");
-      console.error(err);
+    if (user) {
+      if (user.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
+        window.location.replace(MAIN_PAGE);
+      } else {
+        signOut(auth);
+        showError("Access denied. This app is private.");
+      }
     }
   });
 
   window.signInWithGoogle = async function () {
-    const btn    = document.getElementById("googleBtn");
+    const btn     = document.getElementById("googleBtn");
     const spinner = document.getElementById("spinner");
-    const icon   = document.getElementById("googleIcon");
-    const errBox = document.getElementById("errorMsg");
+    const icon    = document.getElementById("googleIcon");
 
     btn.disabled          = true;
     spinner.style.display = "block";
     icon.style.display    = "none";
-    errBox.style.display  = "none";
 
     try {
-      await signInWithRedirect(auth, provider);
-      // Page will redirect to Google — no code runs after this
+      await signInWithPopup(auth, provider);
+      // onAuthStateChanged above will handle the redirect
     } catch (err) {
-      showError("Sign-in failed. Please try again.");
+      showError("Sign-in failed or cancelled. Try again.");
       console.error(err);
       btn.disabled          = false;
       spinner.style.display = "none";
