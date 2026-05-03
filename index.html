@@ -260,7 +260,7 @@
   // If already signed in as the right person, skip straight to app
   onAuthStateChanged(auth, (user) => {
     if (user && user.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
-      window.location.href = "/Morning-OS/Morning_OS_firebase-Final.html";
+      window.location.href = "/Morning-OS/Morning-Os_Firebase_Final.html";
     }
   });
 
@@ -280,7 +280,7 @@
       const email  = result.user.email;
 
       if (email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
-        window.location.href = "/Morning-OS/Morning_OS_firebase-Final.html";
+        window.location.href = "/Morning-OS/Morning-Os_Firebase_Final.html";
       } else {
         await auth.signOut();
         showError("Access denied. This app is private.");
