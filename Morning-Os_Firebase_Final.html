@@ -1,0 +1,2580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Morning Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+  const ALLOWED_EMAIL = "tauhidiyad@gmail.com";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBut2P7iYJM9WNJyTLY7VlRyc-B9ScKOlk",
+    authDomain: "morning-os07.firebaseapp.com",
+    projectId: "morning-os07",
+    storageBucket: "morning-os07.firebasestorage.app",
+    messagingSenderId: "18588008686",
+    appId: "1:18588008686:web:3eb85280a72b56feee33ff"
+  };
+
+  const app  = initializeApp(firebaseConfig);
+  const db   = getFirestore(app);
+  const auth = getAuth(app);
+  const USER_ID = 'user_main';
+
+  onAuthStateChanged(auth, (user) => {
+    // Not signed in or wrong account → kick to login
+    if (!user || user.email.toLowerCase() !== ALLOWED_EMAIL) {
+      window.location.replace("https://tauhidiyad.github.io/Morning-OS/index.html");
+      return;
+    }
+
+    // ✅ Correct user — set up Firebase helpers
+    window._fb = {
+      async saveState(stateObj) {
+        try { await setDoc(doc(db, USER_ID, 'state'), stateObj); }
+        catch(e) { console.warn('FB saveState failed', e); }
+      },
+      async loadState() {
+        try {
+          const snap = await getDoc(doc(db, USER_ID, 'state'));
+          return snap.exists() ? snap.data() : null;
+        } catch(e) { console.warn('FB loadState failed', e); return null; }
+      },
+      async saveRecord(rec) {
+        await setDoc(doc(db, USER_ID, 'records', rec.date), rec);
+      },
+
+      async loadRecords() {
+        try {
+          const snap = await getDocs(collection(db, USER_ID, 'records'));
+          return snap.docs.map(d => d.data());
+        } catch(e) { console.warn('FB loadRecords failed', e); return null; }
+      },
+      async deleteRecord(date) {
+        try { await deleteDoc(doc(db, USER_ID, 'records', date)); }
+        catch(e) { console.warn('FB deleteRecord failed', e); }
+      }
+    };
+
+    // Signal app script — use both flag and event to avoid race condition
+    window._fbReady = true;
+    window.dispatchEvent(new Event('fbReady'));
+  });
+</script>
+<style>
+  :root {
+    --bg: #f5f0e8;
+    --paper: #fdfaf4;
+    --ink: #1a1410;
+    --accent: #c0392b;
+    --accent2: #2c5f2e;
+    --muted: #8a7f72;
+    --line: #d8d0c4;
+    --done-bg: #eaf2ea;
+    --shadow: rgba(26,20,16,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    padding: 24px 16px 60px;
+    background-image: 
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 27px,
+        rgba(180,160,140,0.12) 27px,
+        rgba(180,160,140,0.12) 28px
+      );
+  }
+
+  .notebook {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  .header {
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-radius: 2px 2px 0 0;
+    padding: 12px 20px 14px;
+    box-shadow: 0 2px 12px var(--shadow);
+    position: relative;
+    border-left: 4px solid var(--accent);
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .topic-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+
+  .topic-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--ink);
+    line-height: 1.1;
+  }
+
+  .date-block {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .day-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 38px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .date-str {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .wake-time {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .wake-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    min-width: 86px;
+  }
+
+  .wake-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--ink);
+    border-bottom: 1.5px solid var(--line);
+    padding: 2px 8px 2px 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    user-select: none;
+    transition: border-color 0.15s;
+    min-width: 70px;
+  }
+  .wake-value:hover { border-bottom-color: var(--accent); }
+  .wake-edit-icon {
+    font-size: 10px;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  /* Picker overlay */
+  .picker-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(26,20,16,0.35);
+    z-index: 100;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .picker-overlay.open { display: flex; }
+
+  .picker-sheet {
+    background: var(--paper);
+    border-radius: 12px 12px 0 0;
+    width: 100%;
+    max-width: 480px;
+    padding: 16px 0 32px;
+    box-shadow: 0 -4px 30px rgba(26,20,16,0.15);
+    animation: slideUp 0.22s cubic-bezier(0.32,0.72,0,1);
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+
+  .picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .picker-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  .picker-confirm {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 0;
+  }
+
+  .picker-drums {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 12px 20px 0;
+    position: relative;
+  }
+
+  .picker-drum {
+    flex: 1;
+    height: 180px;
+    overflow: hidden;
+    position: relative;
+    cursor: grab;
+  }
+  .picker-drum:active { cursor: grabbing; }
+
+  .picker-drum-sep {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--ink);
+    padding: 0 4px;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    height: 180px;
+    margin-top: 33px;
+  }
+
+  .drum-list {
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.1s;
+  }
+
+  .drum-item {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--muted);
+    user-select: none;
+    transition: color 0.1s, font-size 0.1s;
+    flex-shrink: 0;
+  }
+
+  .drum-item.selected {
+    color: var(--ink);
+    font-size: 26px;
+  }
+
+  .picker-highlight { display: none; }
+
+  .picker-drum::before,
+  .picker-drum::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    height: 64px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .picker-drum::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--paper), transparent);
+  }
+  .picker-drum::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--paper), transparent);
+  }
+
+  .drum-ampm .drum-item { font-size: 17px; }
+  .drum-ampm .drum-item.selected { font-size: 20px; }
+
+  /* Sync status indicator */
+  .sync-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--line);
+    margin-left: 6px;
+    vertical-align: middle;
+    transition: background 0.3s;
+  }
+  .sync-dot.syncing { background: #f39c12; }
+  .sync-dot.synced  { background: var(--accent2); }
+  .sync-dot.error   { background: var(--accent); }
+
+  /* Sections */
+  .section {
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-top: none;
+    padding: 0 20px;
+    box-shadow: 0 2px 12px var(--shadow);
+  }
+
+  .section:last-of-type {
+    border-radius: 0 0 2px 2px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 0 10px;
+    border-bottom: 1.5px solid var(--line);
+  }
+
+  .section-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .section-dot.green { background: var(--accent2); }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    flex: 1;
+  }
+
+  /* Add task button in header */
+  .add-task-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid var(--line);
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--muted);
+    transition: all 0.15s;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .add-task-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(192,57,43,0.04);
+  }
+  .add-task-btn.green:hover {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: rgba(44,95,46,0.04);
+  }
+
+  /* Task list */
+  .task-list { padding: 6px 0; }
+
+  /* Add task input row */
+  .add-task-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0 8px;
+    border-top: 1px dashed var(--line);
+    margin-top: 2px;
+  }
+
+  .add-task-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 1.5px solid var(--line);
+    outline: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    padding: 4px 2px;
+    transition: border-color 0.15s;
+  }
+  .add-task-input:focus { border-bottom-color: var(--accent); }
+  .add-task-input.green:focus { border-bottom-color: var(--accent2); }
+  .add-task-input::placeholder { color: var(--line); }
+
+  .add-task-confirm {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--accent);
+    background: none;
+    border: 1.5px solid var(--accent);
+    border-radius: 2px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .add-task-confirm:hover { background: var(--accent); color: white; }
+  .add-task-confirm.green { color: var(--accent2); border-color: var(--accent2); }
+  .add-task-confirm.green:hover { background: var(--accent2); color: white; }
+
+  .add-task-cancel {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 4px;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+  }
+  .add-task-cancel:hover { opacity: 1; }
+
+  /* Swipeable task wrapper */
+  .task-item-wrap {
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid rgba(216,208,196,0.5);
+  }
+  .task-item-wrap:last-child { border-bottom: none; }
+
+  .task-item-delete-bg {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 72px;
+    background: var(--bg);
+    border-left: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    cursor: pointer;
+  }
+  .task-item-wrap.reveal-delete .task-item-delete-bg { opacity: 1; }
+
+  .task-item-delete-icon {
+    font-size: 13px;
+    color: var(--muted);
+    pointer-events: none;
+    user-select: none;
+    line-height: 1;
+  }
+  .task-item-delete-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Task items */
+  .task-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 0;
+    border-radius: 3px;
+    padding-left: 0;
+    padding-right: 4px;
+    transition: background 0.15s, transform 0.2s ease;
+    position: relative;
+    background: var(--paper);
+    will-change: transform;
+    touch-action: pan-y;
+  }
+
+  .task-item-wrap:hover .task-item { background: rgba(192,57,43,0.025); }
+  .task-item.done { background: var(--done-bg); }
+
+  .task-item.done .task-text {
+    color: var(--muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--accent2);
+  }
+
+  /* Drag handle */
+  .drag-handle {
+    width: 16px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    cursor: grab;
+    padding: 2px 0;
+    opacity: 0;
+    transition: opacity 0.15s;
+    align-items: center;
+    align-self: center;
+  }
+  .drag-handle span {
+    display: block;
+    width: 10px;
+    height: 1.5px;
+    background: var(--muted);
+    border-radius: 1px;
+  }
+  .task-item:hover .drag-handle { opacity: 0.5; }
+  .task-item.dragging { opacity: 0.4; }
+  .task-item.drag-over { border-top: 2px solid var(--accent); }
+
+  .checkbox {
+    width: 20px; height: 20px;
+    border: 1.5px solid var(--line);
+    border-radius: 2px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    background: white;
+    cursor: pointer;
+  }
+
+  .task-item.done .checkbox {
+    background: var(--accent2);
+    border-color: var(--accent2);
+  }
+
+  .checkmark {
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.15s;
+  }
+
+  .task-item.done .checkmark {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .task-text {
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 400;
+    line-height: 1.4;
+    flex: 1;
+    transition: color 0.15s;
+  }
+
+  /* Delete button — hidden, swipe handles deletion */
+  .task-delete {
+    display: none;
+  }
+
+  /* Scores */
+  .scores-section { padding: 14px 4px 16px; }
+
+  .score-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .score-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    width: 110px;
+    flex-shrink: 0;
+  }
+
+  .score-track {
+    flex: 1;
+    display: flex;
+    gap: 4px;
+  }
+
+  .score-pip {
+    height: 20px;
+    flex: 1;
+    border-radius: 2px;
+    border: 1.5px solid var(--line);
+    background: white;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+
+  .score-pip.active { border-color: transparent; }
+
+  .score-val {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    width: 28px;
+    text-align: right;
+  }
+
+  /* Notes */
+  .notes-area { padding: 10px 0 16px; }
+
+  .notes-field-block {
+    padding: 12px 4px 10px;
+  }
+
+  .notes-field-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .notes-field-icon {
+    color: var(--accent2);
+    font-size: 11px;
+    opacity: 0.8;
+    flex-shrink: 0;
+  }
+
+  .notes-field-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--line) 20%, var(--line) 80%, transparent);
+    margin: 0 4px;
+  }
+
+  textarea {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1.5px solid var(--line);
+    outline: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    resize: none;
+    line-height: 2.0;
+    min-height: 64px;
+    padding: 0;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus { border-bottom-color: var(--accent2); }
+  textarea::placeholder { color: var(--line); }
+
+  /* Footer */
+  .footer {
+    margin-top: 16px;
+    text-align: center;
+  }
+
+  .progress-bar-wrap {
+    background: var(--line);
+    border-radius: 2px;
+    height: 4px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  .progress-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .progress-text span {
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .time-display {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  .reset-btn {
+    background: transparent;
+    border: none;
+    padding: 8px 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+
+  .reset-btn:hover {
+    color: var(--accent);
+  }
+
+  @media (max-width: 360px) {
+    .topic-title { font-size: 22px; }
+    .day-num { font-size: 30px; }
+  }
+
+  /* Footer buttons row */
+  .footer-btns {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 18px;
+  }
+
+  .record-btn {
+    background: transparent;
+    border: none;
+    padding: 8px 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+  .record-btn:hover {
+    color: #688050;
+  }
+
+  /* ── Records overlay ── */
+  .records-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(26,20,16,0.4);
+    z-index: 200;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .records-overlay.open { display: flex; }
+
+  .records-sheet {
+    background: var(--bg);
+    background-image: repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(180,160,140,0.12) 27px, rgba(180,160,140,0.12) 28px);
+    border-radius: 14px 14px 0 0;
+    width: 100%;
+    max-width: 480px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 -4px 30px rgba(26,20,16,0.18);
+    animation: slideUp 0.22s cubic-bezier(0.32,0.72,0,1);
+  }
+
+  .records-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px 12px;
+    border-bottom: 1.5px solid var(--line);
+    flex-shrink: 0;
+    background: var(--paper);
+    border-radius: 14px 14px 0 0;
+  }
+
+  .records-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: 1px;
+  }
+
+  .records-close {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 0;
+    transition: color 0.15s;
+  }
+  .records-close:hover { color: var(--accent); }
+
+  .records-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 12px 16px 32px;
+  }
+
+  .records-empty {
+    text-align: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 40px 20px;
+    letter-spacing: 1px;
+  }
+
+  /* Each day card */
+  .rec-card-wrap {
+    position: relative;
+    margin-bottom: 14px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .rec-card-delete-bg {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 80px;
+    background: var(--bg);
+    border: 1.5px solid var(--line);
+    border-left: none;
+    border-radius: 0 4px 4px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    cursor: pointer;
+  }
+
+  .rec-card-wrap.reveal-delete .rec-card-delete-bg {
+    opacity: 1;
+  }
+
+  .rec-card-delete-icon {
+    font-size: 14px;
+    color: var(--muted);
+    pointer-events: none;
+    user-select: none;
+    line-height: 1;
+  }
+
+  .rec-card-delete-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .rec-card {
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    transform: translateX(0);
+    transition: transform 0.2s ease;
+    will-change: transform;
+    touch-action: pan-y;
+  }
+
+  .rec-card.swiped {
+    transform: translateX(-80px);
+  }
+
+  .rec-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    user-select: none;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .rec-date {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rec-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .rec-done-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+    font-weight: 500;
+  }
+
+  .rec-chevron {
+    font-size: 10px;
+    color: var(--muted);
+    transition: transform 0.2s;
+  }
+  .rec-card.expanded .rec-chevron { transform: rotate(180deg); }
+
+  .rec-body {
+    display: none;
+    padding: 10px 14px 12px;
+    overflow: hidden;
+  }
+  .rec-card.expanded .rec-body { display: block; }
+
+  .rec-section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin: 10px 0 6px;
+  }
+  .rec-section-label:first-child { margin-top: 2px; }
+
+  .rec-task-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    border-bottom: 1px solid rgba(216,208,196,0.4);
+    min-width: 0;
+  }
+  .rec-task-row:last-child { border-bottom: none; }
+
+  .rec-tick {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .rec-tick.done { background: var(--accent2); color: white; }
+  .rec-tick.miss { background: var(--line); color: transparent; }
+
+  .rec-task-name {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .rec-task-name.miss { color: var(--muted); }
+
+  .rec-scores-row {
+    display: flex;
+    align-items: flex-start;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    gap: 18px;
+  }
+
+  .rec-score-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .rec-score-item--executed {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-left: auto;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .rec-score-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .rec-score-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    color: var(--ink);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  .rec-notes-text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    line-height: 1.6;
+    font-style: italic;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .rec-improvements-text {
+    color: var(--accent2);
+    font-style: normal;
+    font-size: 11px;
+    letter-spacing: 0.3px;
+  }
+
+  .rec-wake-row {
+    display: flex;
+    gap: 18px;
+    margin-bottom: 6px;
+  }
+  .rec-wake-item {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .rec-wake-item span { color: var(--ink); font-weight: 500; }
+
+  .rec-progress-bar-wrap {
+    height: 3px;
+    background: var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+    width: 100%;
+  }
+  .rec-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="notebook">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <div>
+        <div class="topic-title" style="margin-top:0;">
+          Morning OS<svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block; vertical-align:baseline; margin-left:8px; margin-bottom:-1px;"><polygon points="11,2 21,20 1,20" fill="var(--accent)"/></svg>
+        </div>
+      </div>
+      <div class="date-block" onclick="openDatePicker()" style="cursor:pointer;">
+        <div class="day-num" id="dayNum">—</div>
+        <div class="date-str" id="dateStr">—</div>
+      </div>
+    </div>
+    <div class="wake-time" style="flex-direction:column; align-items:flex-start; gap:6px; margin-top:10px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="wake-label">Wake Up At</span>
+        <div class="wake-value" id="targetDisplay" onclick="openTargetPicker()">
+          <span id="targetDisplayText">--:--</span>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="wake-label">Woke Up At</span>
+        <div class="wake-value" id="wakeDisplay" onclick="openPicker()">
+          <span id="wakeDisplayText">--:--</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Non-Negotiables -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-dot"></div>
+      <div class="section-title">Non-Negotiables</div>
+      <button class="add-task-btn" id="addMustsBtn" onclick="showAddRow('musts')" title="Add task">+</button>
+    </div>
+    <div class="task-list" id="mustsList"></div>
+    <div class="add-task-row" id="mustsAddRow" style="display:none;">
+      <input class="add-task-input" id="mustsInput" type="text" placeholder="Add a non-negotiable…" maxlength="120"
+        onkeydown="handleAddKey(event,'musts')">
+      <button class="add-task-cancel" onclick="hideAddRow('musts')">✕</button>
+      <button class="add-task-confirm" onclick="confirmAdd('musts')">Add</button>
+    </div>
+  </div>
+
+  <!-- Morning Protocol -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-dot green"></div>
+      <div class="section-title">Morning Protocol</div>
+      <button class="add-task-btn green" id="addProtocolBtn" onclick="showAddRow('protocol')" title="Add task">+</button>
+    </div>
+    <div class="task-list" id="protocolList"></div>
+    <div class="add-task-row" id="protocolAddRow" style="display:none;">
+      <input class="add-task-input green" id="protocolInput" type="text" placeholder="Add a protocol step…" maxlength="120"
+        onkeydown="handleAddKey(event,'protocol')">
+      <button class="add-task-cancel" onclick="hideAddRow('protocol')">✕</button>
+      <button class="add-task-confirm green" onclick="confirmAdd('protocol')">Add</button>
+    </div>
+  </div>
+
+  <!-- Scores -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-dot" style="background:#688050"></div>
+      <div class="section-title">Recon & Calibrate</div>
+    </div>
+
+    <div class="scores-section">
+      <div class="score-row">
+        <div class="score-label">Productivity</div>
+        <div class="score-track" id="prodTrack"></div>
+        <div class="score-val" id="prodVal">—</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Mood</div>
+        <div class="score-track" id="moodTrack"></div>
+        <div class="score-val" id="moodVal">—</div>
+      </div>
+
+      <div class="notes-area">
+        <div class="notes-field-block">
+          <div class="notes-field-label">
+            <span class="notes-field-icon">◈</span>
+            Improvements for Tomorrow
+          </div>
+          <textarea id="improvementsArea" rows="3" placeholder="What would you do differently..."></textarea>
+        </div>
+        <div class="notes-field-divider"></div>
+        <div class="notes-field-block">
+          <div class="notes-field-label">
+            <span class="notes-field-icon">◇</span>
+            Any Words
+          </div>
+          <textarea id="notesArea" rows="3" placeholder="A thought, a quote, anything..."></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progressBar" style="width:0%"></div>
+    </div>
+    <div class="progress-text"><span id="doneCount">0</span> / <span id="totalCount">0</span> done today</div>
+    <div class="footer-btns">
+      <button class="reset-btn" id="newDayBtn" onclick="resetDay()">↺ New Day</button>
+      <button class="record-btn" onclick="openRecords()"><span class="sync-dot" id="syncDot" style="margin-left:0; margin-right:4px;"></span>Record</button>
+    </div>
+  </div>
+
+<!-- Records Overlay -->
+<div class="records-overlay" id="recordsOverlay" onclick="recordsOverlayClick(event)">
+  <div class="records-sheet">
+    <div class="records-header">
+      <div class="records-title">Daily Record</div>
+      <button class="records-close" onclick="closeRecords()">✕ Close</button>
+    </div>
+    <div class="records-body" id="recordsBody">
+      <div class="records-empty">No records yet.<br>Complete a day and it will appear here.</div>
+    </div>
+  </div>
+</div>
+
+</div>
+<div class="picker-overlay" id="targetPickerOverlay" onclick="targetOverlayClick(event)">
+  <div class="picker-sheet">
+    <div class="picker-header">
+      <span class="picker-label">Wake Up At</span>
+      <button class="picker-confirm" onclick="confirmTargetPicker()">Done</button>
+    </div>
+    <div class="picker-drums">
+      <div class="picker-highlight"></div>
+      <div class="picker-drum" id="targetDrumHour"></div>
+      <div class="picker-drum-sep">:</div>
+      <div class="picker-drum" id="targetDrumMin"></div>
+      <div class="picker-drum drum-ampm" id="targetDrumAmpm"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Woke Up At Picker -->
+<div class="picker-overlay" id="pickerOverlay" onclick="overlayClick(event)">
+  <div class="picker-sheet" id="pickerSheet">
+    <div class="picker-header">
+      <span class="picker-label">Woke Up At</span>
+      <button class="picker-confirm" onclick="confirmPicker()">Done</button>
+    </div>
+    <div class="picker-drums">
+      <div class="picker-highlight"></div>
+      <div class="picker-drum" id="drumHour"></div>
+      <div class="picker-drum-sep">:</div>
+      <div class="picker-drum" id="drumMin"></div>
+      <div class="picker-drum drum-ampm" id="drumAmpm"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Date Picker -->
+<div class="picker-overlay" id="datePickerOverlay" onclick="dateOverlayClick(event)">
+  <div class="picker-sheet">
+    <div class="picker-header">
+      <span class="picker-label">Select Date</span>
+      <button class="picker-confirm" onclick="confirmDatePicker()">Done</button>
+    </div>
+    <div class="picker-drums">
+      <div class="picker-drum" id="dateDrumDay"></div>
+      <div class="picker-drum-sep" style="font-size:18px; margin-top:0;">/</div>
+      <div class="picker-drum" id="dateDrumMonth"></div>
+      <div class="picker-drum-sep" style="font-size:18px; margin-top:0;">/</div>
+      <div class="picker-drum" id="dateDrumYear"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Default tasks ─────────────────────────────────────────────────────────
+const DEFAULT_MUSTS = [
+  "Get Outta Bed ASAP",
+  "Go Outside For A Walk / Sunlight",
+  "Hydrate",
+  "Sit In Silence / Breathe",
+  "No Phone & Distraction Next 3 Hours",
+  "Organise & Prepare Work",
+  "Min 2 Hours Straight Work",
+  "Visualise / Recall Your Day",
+  "Be Disciplined / Ruthless",
+  "Follow Back-Up & Do Your Best",
+];
+
+const DEFAULT_PROTOCOL = [
+  "Make Your Bed",
+  "Brush + Be Fresh",
+  "Healthy Snack / Breakfast On Time",
+  "Bath + Skin Care",
+  "Light Stretching",
+  "Journal",
+];
+
+// ─── State ─────────────────────────────────────────────────────────────────
+let state = loadState();
+
+function defaultState() {
+  return {
+    date: todayKey(),
+    musts: {},
+    protocol: {},
+    mustsList: [...DEFAULT_MUSTS],
+    protocolList: [...DEFAULT_PROTOCOL],
+    prod: 0,
+    mood: 0,
+    notes: '',
+    improvements: '',
+    wake: '',
+    wakeTarget: ''
+  };
+}
+
+function loadState() {
+  try {
+    const s = JSON.parse(localStorage.getItem('morningPlannerV2') || '{}');
+    const today = todayKey();
+    if (s.date !== today) {
+      // New day: preserve custom lists but reset checks
+      const fresh = defaultState();
+      if (s.mustsList) fresh.mustsList = s.mustsList;
+      if (s.protocolList) fresh.protocolList = s.protocolList;
+      return fresh;
+    }
+    // Ensure list arrays exist
+    if (!s.mustsList) s.mustsList = [...DEFAULT_MUSTS];
+    if (!s.protocolList) s.protocolList = [...DEFAULT_PROTOCOL];
+    return s;
+  } catch(e) {
+    return defaultState();
+  }
+}
+
+function saveState() {
+  // Always save locally first (instant, offline-safe)
+  localStorage.setItem('morningPlannerV2', JSON.stringify(state));
+  // Then sync to Firebase in background
+  syncDot('syncing');
+  if (window._fb) {
+    window._fb.saveState(state)
+      .then(() => syncDot('synced'))
+      .catch(() => syncDot('error'));
+  }
+}
+
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function dateToKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ─── Add / Remove Tasks ────────────────────────────────────────────────────
+function showAddRow(section) {
+  const row = document.getElementById(section + 'AddRow');
+  const input = document.getElementById(section + 'Input');
+  row.style.display = 'flex';
+  input.value = '';
+  input.focus();
+  document.getElementById('add' + (section === 'musts' ? 'Musts' : 'Protocol') + 'Btn').style.display = 'none';
+}
+
+function hideAddRow(section) {
+  document.getElementById(section + 'AddRow').style.display = 'none';
+  document.getElementById('add' + (section === 'musts' ? 'Musts' : 'Protocol') + 'Btn').style.display = 'flex';
+}
+
+function handleAddKey(e, section) {
+  if (e.key === 'Enter') confirmAdd(section);
+  if (e.key === 'Escape') hideAddRow(section);
+}
+
+function confirmAdd(section) {
+  const input = document.getElementById(section + 'Input');
+  const text = input.value.trim();
+  if (!text) return;
+  state[section + 'List'].push(text);
+  saveState();
+  hideAddRow(section);
+  renderAll();
+}
+
+function deleteTask(section, idx) {
+  const list = state[section + 'List'];
+  list.splice(idx, 1);
+  // Rebuild completion map with shifted indices
+  const newChecks = {};
+  Object.keys(state[section]).forEach(k => {
+    const ki = parseInt(k);
+    if (ki < idx && state[section][k]) newChecks[ki] = true;
+    if (ki > idx && state[section][k]) newChecks[ki - 1] = true;
+  });
+  state[section] = newChecks;
+  saveState();
+  renderAll();
+}
+
+// ─── Drag-to-sort ──────────────────────────────────────────────────────────
+let dragSrc = null;
+let dragSection = null;
+
+function onDragStart(e, section, idx) {
+  dragSrc = idx;
+  dragSection = section;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', idx);
+}
+
+function onDragOver(e, idx) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  // highlight
+  const container = document.getElementById(dragSection + 'List');
+  container.querySelectorAll('.task-item').forEach((el, i) => {
+    el.classList.toggle('drag-over', i === idx && i !== dragSrc);
+  });
+}
+
+function onDrop(e, section, idx) {
+  e.preventDefault();
+  if (dragSection !== section || dragSrc === null || dragSrc === idx) {
+    clearDragState(section);
+    return;
+  }
+  // Reorder list
+  const list = state[section + 'List'];
+  const [moved] = list.splice(dragSrc, 1);
+  list.splice(idx, 0, moved);
+
+  // Reorder completion map
+  const checks = {};
+  const oldKeys = Object.keys(state[section]).map(Number).filter(k => state[section][k]);
+  // Build ordered array of check states
+  const oldChecks = list.map((_, ni) => {
+    // figure out where ni came from before the move
+    return false; // we'll rebuild simply
+  });
+  // Simple approach: track which tasks were checked by value
+  // (since text is unique-ish, this is reasonable)
+  const checkedTexts = new Set();
+  const originalList = [...list]; // list is already reordered
+  // We need the old list to map checks. Use dragSrc/idx to reconstruct.
+  // Actually, let's just rebuild by old index mapping.
+  // Before move: items were at their original positions.
+  // We stored checks by index. Reconstruct old order:
+  const beforeMove = [...list];
+  beforeMove.splice(idx, 1);
+  beforeMove.splice(dragSrc, 0, moved);
+  // Now map: for each item in new list, find its old index in beforeMove
+  const newChecks = {};
+  list.forEach((item, newIdx) => {
+    const oldIdx = beforeMove.indexOf(item);
+    if (state[section][oldIdx]) newChecks[newIdx] = true;
+  });
+  state[section] = newChecks;
+
+  dragSrc = null;
+  dragSection = null;
+  saveState();
+  renderAll();
+}
+
+function onDragEnd(e, section) {
+  clearDragState(section);
+  dragSrc = null;
+  dragSection = null;
+}
+
+function clearDragState(section) {
+  const container = document.getElementById(section + 'List');
+  if (container) {
+    container.querySelectorAll('.task-item').forEach(el => {
+      el.classList.remove('dragging', 'drag-over');
+    });
+  }
+}
+
+// Touch drag support
+let touchDragSrc = null;
+let touchDragSection = null;
+let touchDragEl = null;
+let touchGhost = null;
+let touchOffsetY = 0;
+
+function onTouchStart(e, section, idx) {
+  const handle = e.currentTarget.querySelector('.drag-handle');
+  const touch = e.touches[0];
+  const handleRect = handle.getBoundingClientRect();
+  // Only start drag if touching the handle area
+  if (touch.clientX < handleRect.left - 8 || touch.clientX > handleRect.right + 8) return;
+  touchDragSrc = idx;
+  touchDragSection = section;
+  touchDragEl = e.currentTarget;
+  touchOffsetY = touch.clientY - touchDragEl.getBoundingClientRect().top;
+  e.currentTarget.classList.add('dragging');
+
+  // Create ghost
+  touchGhost = touchDragEl.cloneNode(true);
+  touchGhost.style.cssText = `
+    position: fixed;
+    left: ${touchDragEl.getBoundingClientRect().left}px;
+    top: ${touch.clientY - touchOffsetY}px;
+    width: ${touchDragEl.offsetWidth}px;
+    opacity: 0.85;
+    background: var(--paper);
+    box-shadow: 0 4px 20px rgba(26,20,16,0.18);
+    border-radius: 4px;
+    z-index: 999;
+    pointer-events: none;
+  `;
+  document.body.appendChild(touchGhost);
+}
+
+function onTouchMove(e, section) {
+  if (touchDragSrc === null || touchDragSection !== section) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+  if (touchGhost) {
+    touchGhost.style.top = (touch.clientY - touchOffsetY) + 'px';
+  }
+  // Find target index
+  const container = document.getElementById(section + 'List');
+  const items = container.querySelectorAll('.task-item');
+  let targetIdx = null;
+  items.forEach((el, i) => {
+    const rect = el.getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (touch.clientY < mid && targetIdx === null) targetIdx = i;
+    el.classList.remove('drag-over');
+  });
+  if (targetIdx === null) targetIdx = items.length - 1;
+  if (targetIdx !== touchDragSrc && items[targetIdx]) {
+    items[targetIdx].classList.add('drag-over');
+  }
+}
+
+function onTouchEnd(e, section) {
+  if (touchDragSrc === null || touchDragSection !== section) return;
+  if (touchGhost) { touchGhost.remove(); touchGhost = null; }
+  const touch = e.changedTouches[0];
+  const container = document.getElementById(section + 'List');
+  const items = container.querySelectorAll('.task-item');
+  let targetIdx = null;
+  items.forEach((el, i) => {
+    const rect = el.getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (touch.clientY < mid && targetIdx === null) targetIdx = i;
+    el.classList.remove('drag-over');
+    el.classList.remove('dragging');
+  });
+  if (targetIdx === null) targetIdx = items.length - 1;
+
+  if (targetIdx !== touchDragSrc) {
+    const list = state[section + 'List'];
+    const [moved] = list.splice(touchDragSrc, 1);
+    list.splice(targetIdx, 0, moved);
+
+    const beforeMove = [...list];
+    beforeMove.splice(targetIdx, 1);
+    beforeMove.splice(touchDragSrc, 0, moved);
+    const newChecks = {};
+    list.forEach((item, newIdx) => {
+      const oldIdx = beforeMove.indexOf(item);
+      if (state[section][oldIdx]) newChecks[newIdx] = true;
+    });
+    state[section] = newChecks;
+    saveState();
+    renderAll();
+  }
+
+  touchDragSrc = null;
+  touchDragSection = null;
+  touchDragEl = null;
+}
+
+// ─── Swipe-to-delete for task items ────────────────────────────────────────
+function attachTaskSwipe(wrap, item, section, idx) {
+  let startX = 0, startY = 0, dx = 0, dragging = false, swiped = false, lockAxis = null;
+  const THRESHOLD = 36;
+  const MAX = 72;
+
+  function onStart(x, y) {
+    startX = x; startY = y; dx = 0; dragging = true; lockAxis = null;
+    item.style.transition = 'none';
+  }
+
+  function onMove(x, y) {
+    if (!dragging) return;
+    const moveX = x - startX;
+    const moveY = y - startY;
+    if (!lockAxis) {
+      if (Math.abs(moveX) > 5 || Math.abs(moveY) > 5)
+        lockAxis = Math.abs(moveX) > Math.abs(moveY) ? 'x' : 'y';
+    }
+    if (lockAxis !== 'x') return;
+    dx = Math.max(-MAX, Math.min(0, moveX + (swiped ? -MAX : 0)));
+    item.style.transform = `translateX(${dx}px)`;
+  }
+
+  function onEnd() {
+    if (!dragging || lockAxis !== 'x') { dragging = false; return; }
+    dragging = false;
+    item.style.transition = 'transform 0.2s ease';
+    if (!swiped && dx < -THRESHOLD) {
+      item.style.transform = `translateX(-${MAX}px)`;
+      wrap.classList.add('reveal-delete');
+      swiped = true;
+    } else if (swiped && dx > -MAX + THRESHOLD) {
+      item.style.transform = 'translateX(0)';
+      wrap.classList.remove('reveal-delete');
+      swiped = false;
+    } else {
+      item.style.transform = swiped ? `translateX(-${MAX}px)` : 'translateX(0)';
+      if (!swiped) wrap.classList.remove('reveal-delete');
+    }
+  }
+
+  // Touch
+  item.addEventListener('touchstart', e => {
+    // Don't steal from drag-handle touch drag
+    const handle = item.querySelector('.drag-handle');
+    const t = e.touches[0];
+    const hr = handle.getBoundingClientRect();
+    if (t.clientX >= hr.left - 8 && t.clientX <= hr.right + 8) return;
+    onStart(t.clientX, t.clientY);
+  }, { passive: true });
+
+  item.addEventListener('touchmove', e => {
+    if (lockAxis === 'x') e.preventDefault();
+    onMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
+
+  item.addEventListener('touchend', () => onEnd());
+
+  // Mouse (desktop convenience)
+  item.addEventListener('mousedown', e => {
+    // Don't interfere with drag-handle
+    if (e.target.closest('.drag-handle') || e.target.closest('.checkbox')) return;
+    onStart(e.clientX, e.clientY);
+  });
+  window.addEventListener('mousemove', e => { if (dragging) onMove(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', () => { if (dragging) onEnd(); });
+
+  // Delete button click
+  wrap.querySelector('.task-item-delete-bg').addEventListener('click', () => {
+    wrap.style.transition = 'opacity 0.2s, transform 0.2s';
+    wrap.style.opacity = '0';
+    wrap.style.transform = 'translateX(-100%)';
+    setTimeout(() => deleteTask(section, idx), 220);
+  });
+
+  // Tap on swiped card → snap back
+  item.addEventListener('click', e => {
+    if (swiped) {
+      e.stopPropagation();
+      item.style.transition = 'transform 0.2s ease';
+      item.style.transform = 'translateX(0)';
+      wrap.classList.remove('reveal-delete');
+      swiped = false;
+    }
+  }, true);
+}
+
+// ─── Render ────────────────────────────────────────────────────────────────
+function renderList(tasks, stateKey, containerId) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const section = stateKey; // 'musts' or 'protocol'
+
+  tasks.forEach((task, i) => {
+    const done = !!state[stateKey][i];
+
+    // Outer swipe wrapper
+    const wrap = document.createElement('div');
+    wrap.className = 'task-item-wrap';
+
+    // Delete background revealed on swipe
+    const deleteBg = document.createElement('div');
+    deleteBg.className = 'task-item-delete-bg';
+    deleteBg.innerHTML = '<span class="task-item-delete-icon">✕</span><span class="task-item-delete-label">Delete</span>';
+
+    const item = document.createElement('div');
+    item.className = 'task-item' + (done ? ' done' : '');
+    item.draggable = true;
+
+    item.innerHTML = `
+      <div class="drag-handle"><span></span><span></span><span></span></div>
+      <div class="checkbox"><span class="checkmark">✓</span></div>
+      <div class="task-text">${escHtml(task)}</div>
+      <button class="task-delete" title="Remove">✕</button>
+    `;
+
+    // Checkbox toggle
+    item.querySelector('.checkbox').addEventListener('click', (e) => {
+      e.stopPropagation();
+      state[stateKey][i] = !state[stateKey][i];
+      saveState();
+      renderAll();
+    });
+
+    // Desktop drag
+    item.addEventListener('dragstart', (e) => onDragStart(e, section, i));
+    item.addEventListener('dragover',  (e) => onDragOver(e, i));
+    item.addEventListener('drop',      (e) => onDrop(e, section, i));
+    item.addEventListener('dragend',   (e) => onDragEnd(e, section));
+
+    // Touch drag
+    item.addEventListener('touchstart', (e) => onTouchStart(e, section, i), { passive: true });
+    item.addEventListener('touchmove',  (e) => onTouchMove(e, section), { passive: false });
+    item.addEventListener('touchend',   (e) => onTouchEnd(e, section));
+
+    wrap.appendChild(deleteBg);
+    wrap.appendChild(item);
+    container.appendChild(wrap);
+
+    // Attach swipe-to-delete
+    attachTaskSwipe(wrap, item, section, i);
+  });
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const PIP_COLORS = [
+  '#b8c0be', // 1 — cool mist
+  '#a8b8b0', // 2 — mist with a green whisper
+  '#90a894', // 3 — mossy stone
+  '#7a9868', // 4 — olive awakening
+  '#688050', // 5 — deeper olive
+  '#507840', // 6 — olive-green
+  '#3e6e34', // 7 — soft forest
+  '#326630', // 8 — forest
+  '#234f25', // 9 — rich deep green
+  '#1a4220', // 10 — darkest forest
+];
+
+function renderScores() {
+  ['prod', 'mood'].forEach(type => {
+    const track = document.getElementById(type + 'Track');
+    const val = document.getElementById(type + 'Val');
+    track.innerHTML = '';
+    for (let i = 1; i <= 10; i++) {
+      const pip = document.createElement('div');
+      const isActive = i <= state[type];
+      pip.className = 'score-pip' + (isActive ? ' active' : '');
+      if (isActive) {
+        pip.style.background = PIP_COLORS[i - 1];
+        pip.style.boxShadow = `0 0 3px ${PIP_COLORS[i - 1]}44`;
+      }
+      pip.addEventListener('click', () => {
+        state[type] = i;
+        saveState();
+        renderScores();
+      });
+      track.appendChild(pip);
+    }
+    val.textContent = state[type] > 0 ? `${state[type]}/10` : '—';
+    if (state[type] > 0) {
+      document.getElementById(type + 'Val').style.color = PIP_COLORS[state[type] - 1];
+    } else {
+      document.getElementById(type + 'Val').style.color = '';
+    }
+  });
+}
+
+function renderProgress() {
+  const total = state.mustsList.length + state.protocolList.length;
+  const done = Object.values(state.musts).filter(Boolean).length +
+               Object.values(state.protocol).filter(Boolean).length;
+  document.getElementById('progressBar').style.width = total > 0 ? (done / total * 100) + '%' : '0%';
+  document.getElementById('doneCount').textContent = done;
+  document.getElementById('totalCount').textContent = total;
+}
+
+function renderAll() {
+  renderList(state.mustsList, 'musts', 'mustsList');
+  renderList(state.protocolList, 'protocol', 'protocolList');
+  renderScores();
+  renderProgress();
+
+  const notesEl = document.getElementById('notesArea');
+  notesEl.value = state.notes || '';
+  notesEl.oninput = () => { state.notes = notesEl.value; saveState(); };
+  const improvementsEl = document.getElementById('improvementsArea');
+  improvementsEl.value = state.improvements || '';
+  improvementsEl.oninput = () => { state.improvements = improvementsEl.value; saveState(); };
+}
+
+function resetDay() {
+  if (confirm('Start a new day? Check marks and scores will be cleared. Your task lists will be kept.')) {
+    // Save today's snapshot to records before clearing
+    const snap = {
+      date: dateToKey(new Date()),
+      musts: {...state.musts},
+      protocol: {...state.protocol},
+      mustsList: [...(state.mustsList || [])],
+      protocolList: [...(state.protocolList || [])],
+      prod: state.prod,
+      mood: state.mood,
+      notes: state.notes,
+      improvements: state.improvements,
+      wake: state.wake,
+      wakeTarget: state.wakeTarget,
+      executedAt: (() => {
+        const n = new Date();
+        const h = n.getHours(), m = n.getMinutes();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ampm}`;
+      })()
+    };
+
+    // Save record to localStorage
+    const records = loadRecords();
+    const ri = records.findIndex(r => r.date === snap.date);
+    if (ri >= 0) records[ri] = snap; else records.push(snap);
+    records.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    records.splice(90);
+    localStorage.setItem('morningPlannerRecords', JSON.stringify(records));
+
+    // Reset state and save locally
+    const musts = state.mustsList;
+    const protocol = state.protocolList;
+    state = defaultState();
+    state.mustsList = musts;
+    state.protocolList = protocol;
+    localStorage.setItem('morningPlannerV2', JSON.stringify(state));
+
+    // One coordinated sync — dot goes orange, waits for both writes, then green
+    syncDot('syncing');
+    if (window._fb) {
+      Promise.all([
+        window._fb.saveRecord(snap),
+        window._fb.saveState(state)
+      ])
+        .then(() => syncDot('synced'))
+        .catch(() => syncDot('error'));
+    }
+
+    updateWakeDisplay();
+    updateTargetDisplay();
+    updateDateDisplay();
+    renderAll();
+  }
+}
+
+// ─── Header init ───────────────────────────────────────────────────────────
+let selectedDate = new Date();
+
+function calcStreak() {
+  const records = loadRecords();
+  const recordDates = new Set(records.map(r => r.date));
+  let streak = 0;
+  const d = new Date();
+  while (true) {
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if (recordDates.has(key)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return Math.max(streak, 1);
+}
+
+function updateDateDisplay() {
+  const d = selectedDate;
+  const day = d.getDate();
+  const month = d.getMonth() + 1;
+  const year = d.getFullYear();
+  document.getElementById('dayNum').textContent = String(calcStreak()).padStart(2, '0');
+  document.getElementById('dateStr').textContent =
+    `${String(day).padStart(2,'0')} / ${String(month).padStart(2,'0')} / ${year}`;
+}
+
+function autoSnapIfNeeded() {
+  const n = new Date();
+  const h = n.getHours();
+  const m = n.getMinutes();
+
+  // Only fire at 23:59 (11:59 PM)
+  if (h !== 23 || m !== 59) return;
+
+  // Only for today, not a past date the user is browsing
+  if (dateToKey(selectedDate) !== todayKey()) return;
+
+  // Skip entirely if user already pressed New Day themselves
+  const existingRecord = loadRecords().find(r => r.date === todayKey());
+  if (existingRecord) return;
+
+  // Only snap if at least one task is checked
+  const anyChecked =
+    Object.values(state.musts).some(Boolean) ||
+    Object.values(state.protocol).some(Boolean);
+  if (!anyChecked) return;
+
+  // Guard: only snap once per minute (interval fires every second)
+  if (localStorage.getItem('autoSnappedDate') === todayKey()) return;
+  localStorage.setItem('autoSnappedDate', todayKey());
+
+  // Save the record
+  const snap = {
+    date: todayKey(),
+    musts: {...state.musts},
+    protocol: {...state.protocol},
+    mustsList: [...(state.mustsList || [])],
+    protocolList: [...(state.protocolList || [])],
+    prod: state.prod,
+    mood: state.mood,
+    notes: state.notes,
+    improvements: state.improvements,
+    wake: state.wake,
+    wakeTarget: state.wakeTarget,
+    executedAt: (() => {
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ampm}`;
+    })()
+  };
+  saveRecord(snap);
+  updateDateDisplay();
+}
+
+function initHeader() {
+  selectedDate = new Date();
+  updateDateDisplay();
+  updateWakeDisplay();
+  updateTargetDisplay();
+  updateFooterBtn();
+
+  setInterval(() => {
+    const n = new Date();
+    const el = document.getElementById('nowTime');
+    if (el) el.textContent = n.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    autoSnapIfNeeded();
+  }, 1000);
+}
+
+// ─── Date Picker ────────────────────────────────────────────────────────────
+let dpDay, dpMonth, dpYear;
+
+function openDatePicker() {
+  dpDay   = selectedDate.getDate();
+  dpMonth = selectedDate.getMonth() + 1;
+  dpYear  = selectedDate.getFullYear();
+
+  const days   = Array.from({length: 31}, (_, i) => String(i + 1).padStart(2, '0'));
+  const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  const years  = Array.from({length: 10}, (_, i) => String(dpYear - 4 + i));
+
+  buildDrum(document.getElementById('dateDrumDay'),   days,   dpDay - 1,          idx => { dpDay   = idx + 1; });
+  buildDrum(document.getElementById('dateDrumMonth'), months, dpMonth - 1,         idx => { dpMonth = idx + 1; });
+  buildDrum(document.getElementById('dateDrumYear'),  years,  4,                   idx => { dpYear  = parseInt(years[idx]); });
+
+  document.getElementById('datePickerOverlay').classList.add('open');
+}
+
+function dateOverlayClick(e) {
+  if (e.target === document.getElementById('datePickerOverlay')) closeDatePicker();
+}
+
+function closeDatePicker() {
+  document.getElementById('datePickerOverlay').classList.remove('open');
+}
+
+function confirmDatePicker() {
+  selectedDate = new Date(dpYear, dpMonth - 1, dpDay);
+  updateDateDisplay();
+  updateFooterBtn();
+  closeDatePicker();
+}
+
+// ─── Custom Drum Picker ────────────────────────────────────────────────────
+const ITEM_H = 44;
+let pickerHour = 6, pickerMin = 0, pickerAmpm = 0;
+
+function buildDrum(el, items, currentIndex, onSelect) {
+  el.innerHTML = '';
+  const list = document.createElement('div');
+  list.className = 'drum-list';
+
+  const pad = 2;
+  for (let p = 0; p < pad; p++) {
+    const blank = document.createElement('div');
+    blank.className = 'drum-item';
+    list.appendChild(blank);
+  }
+  items.forEach((item, i) => {
+    const div = document.createElement('div');
+    div.className = 'drum-item' + (i === currentIndex ? ' selected' : '');
+    div.textContent = item;
+    list.appendChild(div);
+  });
+  for (let p = 0; p < pad; p++) {
+    const blank = document.createElement('div');
+    blank.className = 'drum-item';
+    list.appendChild(blank);
+  }
+
+  el.appendChild(list);
+  let curIdx = currentIndex;
+
+  function highlightAt(idx) {
+    const all = list.querySelectorAll('.drum-item');
+    all.forEach((d, i) => {
+      d.className = 'drum-item' + (i - pad === idx ? ' selected' : '');
+    });
+  }
+
+  function snapTo(idx) {
+    idx = Math.max(0, Math.min(items.length - 1, idx));
+    curIdx = idx;
+    list.style.transition = 'transform 0.2s cubic-bezier(0.25,0.46,0.45,0.94)';
+    list.style.transform = `translateY(${-idx * ITEM_H}px)`;
+    highlightAt(idx);
+    onSelect(idx);
+  }
+
+  list.style.transition = 'none';
+  list.style.transform = `translateY(${-curIdx * ITEM_H}px)`;
+  highlightAt(curIdx);
+
+  let startY = 0, startOffset = 0, active = false, lastHapticIdx = currentIndex;
+
+  el.addEventListener('touchstart', e => {
+    e.preventDefault();
+    active = true;
+    startY = e.touches[0].clientY;
+    startOffset = -curIdx * ITEM_H;
+    list.style.transition = 'none';
+  }, { passive: false });
+
+  el.addEventListener('touchmove', e => {
+    if (!active) return;
+    e.preventDefault();
+    const dy = e.touches[0].clientY - startY;
+    const raw = startOffset + dy;
+    const min = -(items.length - 1) * ITEM_H;
+    const max = 0;
+    let offset = raw;
+    if (raw > max) offset = max + (raw - max) * 0.25;
+    if (raw < min) offset = min + (raw - min) * 0.25;
+    list.style.transform = `translateY(${offset}px)`;
+    const liveIdx = Math.max(0, Math.min(items.length - 1, Math.round(-offset / ITEM_H)));
+    if (liveIdx !== lastHapticIdx) {
+      lastHapticIdx = liveIdx;
+      if (navigator.vibrate) navigator.vibrate(6);
+    }
+    highlightAt(liveIdx);
+  }, { passive: false });
+
+  el.addEventListener('touchend', e => {
+    if (!active) return;
+    active = false;
+    const dy = e.changedTouches[0].clientY - startY;
+    const raw = startOffset + dy;
+    snapTo(Math.round(-raw / ITEM_H));
+  }, { passive: false });
+
+  el.addEventListener('mousedown', e => {
+    active = true;
+    startY = e.clientY;
+    startOffset = -curIdx * ITEM_H;
+    list.style.transition = 'none';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!active) return;
+    const dy = e.clientY - startY;
+    const raw = startOffset + dy;
+    const min = -(items.length - 1) * ITEM_H;
+    const max = 0;
+    let offset = Math.max(min, Math.min(max, raw));
+    list.style.transform = `translateY(${offset}px)`;
+    highlightAt(Math.max(0, Math.min(items.length - 1, Math.round(-offset / ITEM_H))));
+  });
+
+  window.addEventListener('mouseup', e => {
+    if (!active) return;
+    active = false;
+    const dy = e.clientY - startY;
+    const raw = startOffset + dy;
+    snapTo(Math.round(-raw / ITEM_H));
+  });
+
+  el.addEventListener('wheel', e => {
+    e.preventDefault();
+    snapTo(curIdx + (e.deltaY > 0 ? 1 : -1));
+  }, { passive: false });
+}
+
+function openPicker() {
+  if (state.wake) {
+    const [hh, mm] = state.wake.split(':').map(Number);
+    pickerAmpm = hh >= 12 ? 1 : 0;
+    pickerHour = hh % 12 || 12;
+    pickerMin  = mm;
+  } else {
+    const now = new Date();
+    pickerHour = now.getHours() % 12 || 12;
+    pickerMin  = now.getMinutes();
+    pickerAmpm = now.getHours() >= 12 ? 1 : 0;
+  }
+  const hours = Array.from({length:12}, (_,i) => String(i+1).padStart(2,'0'));
+  buildDrum(document.getElementById('drumHour'), hours, pickerHour - 1, idx => { pickerHour = idx + 1; });
+  const mins = Array.from({length:60}, (_,i) => String(i).padStart(2,'0'));
+  buildDrum(document.getElementById('drumMin'), mins, pickerMin, idx => { pickerMin = idx; });
+  buildDrum(document.getElementById('drumAmpm'), ['AM','PM'], pickerAmpm, idx => { pickerAmpm = idx; });
+  document.getElementById('pickerOverlay').classList.add('open');
+}
+
+function overlayClick(e) {
+  if (e.target === document.getElementById('pickerOverlay')) closePicker();
+}
+
+function closePicker() {
+  document.getElementById('pickerOverlay').classList.remove('open');
+}
+
+function confirmPicker() {
+  let h24 = pickerHour % 12 + pickerAmpm * 12;
+  state.wake = String(h24).padStart(2,'0') + ':' + String(pickerMin).padStart(2,'0');
+  saveState();
+  updateWakeDisplay();
+  closePicker();
+}
+
+function updateWakeDisplay() {
+  const el = document.getElementById('wakeDisplayText');
+  if (!state.wake) { el.textContent = '--:--'; return; }
+  const [hh, mm] = state.wake.split(':').map(Number);
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const h12 = hh % 12 || 12;
+  el.textContent = `${String(h12).padStart(2,'0')}:${String(mm).padStart(2,'0')} ${ampm}`;
+}
+
+let targetPickerHour = 6, targetPickerMin = 0, targetPickerAmpm = 0;
+
+function openTargetPicker() {
+  if (state.wakeTarget) {
+    const [hh, mm] = state.wakeTarget.split(':').map(Number);
+    targetPickerAmpm = hh >= 12 ? 1 : 0;
+    targetPickerHour = hh % 12 || 12;
+    targetPickerMin  = mm;
+  } else {
+    targetPickerHour = 6; targetPickerMin = 0; targetPickerAmpm = 0;
+  }
+  const hours = Array.from({length:12}, (_,i) => String(i+1).padStart(2,'0'));
+  buildDrum(document.getElementById('targetDrumHour'), hours, targetPickerHour - 1, idx => { targetPickerHour = idx + 1; });
+  const mins = Array.from({length:60}, (_,i) => String(i).padStart(2,'0'));
+  buildDrum(document.getElementById('targetDrumMin'), mins, targetPickerMin, idx => { targetPickerMin = idx; });
+  buildDrum(document.getElementById('targetDrumAmpm'), ['AM','PM'], targetPickerAmpm, idx => { targetPickerAmpm = idx; });
+  document.getElementById('targetPickerOverlay').classList.add('open');
+}
+
+function targetOverlayClick(e) {
+  if (e.target === document.getElementById('targetPickerOverlay')) closeTargetPicker();
+}
+
+function closeTargetPicker() {
+  document.getElementById('targetPickerOverlay').classList.remove('open');
+}
+
+function confirmTargetPicker() {
+  let h24 = targetPickerHour % 12 + targetPickerAmpm * 12;
+  state.wakeTarget = String(h24).padStart(2,'0') + ':' + String(targetPickerMin).padStart(2,'0');
+  saveState();
+  updateTargetDisplay();
+  closeTargetPicker();
+}
+
+function updateTargetDisplay() {
+  const el = document.getElementById('targetDisplayText');
+  if (!state.wakeTarget) { el.textContent = '--:--'; return; }
+  const [hh, mm] = state.wakeTarget.split(':').map(Number);
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const h12 = hh % 12 || 12;
+  el.textContent = `${String(h12).padStart(2,'0')}:${String(mm).padStart(2,'0')} ${ampm}`;
+}
+
+// ─── Records ────────────────────────────────────────────────────────────────
+function loadRecords() {
+  try { return JSON.parse(localStorage.getItem('morningPlannerRecords') || '[]'); }
+  catch(e) { return []; }
+}
+
+async function loadRecordsFromFirebase() {
+  if (!window._fb) return;
+  const fbRecords = await window._fb.loadRecords();
+  const localRecords = loadRecords();
+
+  if (!fbRecords || fbRecords.length === 0) {
+    // Firebase is empty — push all local records up to Firebase
+    for (const rec of localRecords) {
+      await window._fb.saveRecord(rec).catch(() => {});
+    }
+    return;
+  }
+
+  // Merge: Firebase + local, deduplicated by date, Firebase wins on conflict
+  const merged = {};
+  for (const rec of localRecords) merged[rec.date] = rec;
+  for (const rec of fbRecords)    merged[rec.date] = rec; // Firebase overwrites
+  const final = Object.values(merged)
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, 90);
+  localStorage.setItem('morningPlannerRecords', JSON.stringify(final));
+}
+
+function saveRecord(snap) {
+  // Save to localStorage
+  const records = loadRecords();
+  const idx = records.findIndex(r => r.date === snap.date);
+  if (idx >= 0) records[idx] = snap; else records.push(snap);
+  records.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  records.splice(90);
+  localStorage.setItem('morningPlannerRecords', JSON.stringify(records));
+  // Sync to Firebase in background
+  syncDot('syncing');
+  if (window._fb) {
+    window._fb.saveRecord(snap)
+      .then(() => syncDot('synced'))
+      .catch(() => syncDot('error'));
+  }
+}
+
+function formatRecordDate(iso) {
+  const [y, m, d] = iso.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dt = new Date(Number(y), Number(m) - 1, Number(d));
+  return `${days[dt.getDay()]} · ${String(d).replace(/^0/,'')} ${months[Number(m)-1]} ${y}`;
+}
+
+function fmt12(time24) {
+  if (!time24) return '–';
+  const [hh, mm] = time24.split(':').map(Number);
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const h12 = hh % 12 || 12;
+  return `${String(h12).padStart(2,'0')}:${String(mm).padStart(2,'0')} ${ampm}`;
+}
+
+function openRecords() {
+  renderRecords();
+  document.getElementById('recordsOverlay').classList.add('open');
+}
+
+function closeRecords() {
+  document.getElementById('recordsOverlay').classList.remove('open');
+}
+
+function recordsOverlayClick(e) {
+  if (e.target === document.getElementById('recordsOverlay')) closeRecords();
+}
+
+function deleteRecord(date) {
+  const records = loadRecords().filter(r => r.date !== date);
+  localStorage.setItem('morningPlannerRecords', JSON.stringify(records));
+  // Delete from Firebase too
+  if (window._fb) {
+    window._fb.deleteRecord(date)
+      .then(() => syncDot('synced'))
+      .catch(() => syncDot('error'));
+  }
+  renderRecords();
+}
+
+function attachSwipe(wrap, card, date) {
+  let startX = 0, startY = 0, dx = 0, dragging = false, swiped = false, lockAxis = null;
+  const THRESHOLD = 40;
+  const MAX = 80;
+
+  function onStart(x, y) {
+    startX = x; startY = y; dx = 0; dragging = true; lockAxis = null;
+    card.style.transition = 'none';
+  }
+
+  function onMove(x, y) {
+    if (!dragging) return;
+    const moveX = x - startX;
+    const moveY = y - startY;
+
+    if (!lockAxis) {
+      if (Math.abs(moveX) > 5 || Math.abs(moveY) > 5)
+        lockAxis = Math.abs(moveX) > Math.abs(moveY) ? 'x' : 'y';
+    }
+    if (lockAxis !== 'x') return;
+
+    dx = Math.max(-MAX, Math.min(0, moveX + (swiped ? -MAX : 0)));
+    card.style.transform = `translateX(${dx}px)`;
+  }
+
+  function onEnd() {
+    if (!dragging || lockAxis !== 'x') { dragging = false; return; }
+    dragging = false;
+    card.style.transition = 'transform 0.2s ease';
+    if (!swiped && dx < -THRESHOLD) {
+      card.style.transform = `translateX(-${MAX}px)`;
+      wrap.classList.add('reveal-delete');
+      swiped = true;
+    } else if (swiped && dx > -MAX + THRESHOLD) {
+      card.style.transform = 'translateX(0)';
+      wrap.classList.remove('reveal-delete');
+      swiped = false;
+    } else {
+      card.style.transform = swiped ? `translateX(-${MAX}px)` : 'translateX(0)';
+      if (!swiped) wrap.classList.remove('reveal-delete');
+    }
+  }
+
+  // Touch
+  card.addEventListener('touchstart', e => {
+    onStart(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  card.addEventListener('touchmove', e => {
+    if (lockAxis === 'x') e.preventDefault();
+    onMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
+  card.addEventListener('touchend', () => onEnd());
+
+  // Mouse
+  card.addEventListener('mousedown', e => onStart(e.clientX, e.clientY));
+  window.addEventListener('mousemove', e => { if (dragging) onMove(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', () => { if (dragging) onEnd(); });
+
+  // Delete button
+  wrap.querySelector('.rec-card-delete-bg').addEventListener('click', () => {
+    wrap.style.transition = 'opacity 0.2s, transform 0.2s';
+    wrap.style.opacity = '0';
+    wrap.style.transform = 'translateX(-100%)';
+    setTimeout(() => deleteRecord(date), 220);
+  });
+
+  // Tap on card when swiped → snap back
+  card.addEventListener('click', e => {
+    if (swiped) {
+      e.stopPropagation();
+      card.style.transition = 'transform 0.2s ease';
+      card.style.transform = 'translateX(0)';
+      wrap.classList.remove('reveal-delete');
+      swiped = false;
+    }
+  }, true);
+}
+
+function renderRecords() {
+  const body = document.getElementById('recordsBody');
+  const records = loadRecords().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+  if (records.length === 0) {
+    body.innerHTML = '<div class="records-empty">No records yet.<br>Complete a day and it will appear here.</div>';
+    return;
+  }
+
+  body.innerHTML = '';
+
+  records.forEach((rec, ri) => {
+    const mustsTotal = rec.mustsList ? rec.mustsList.length : 0;
+    const protocolTotal = rec.protocolList ? rec.protocolList.length : 0;
+    const mustsDone = Object.values(rec.musts || {}).filter(Boolean).length;
+    const protocolDone = Object.values(rec.protocol || {}).filter(Boolean).length;
+    const total = mustsTotal + protocolTotal;
+    const done = mustsDone + protocolDone;
+    const pct = total > 0 ? Math.round(done / total * 100) : 0;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'rec-card-wrap';
+
+    const deleteBg = document.createElement('div');
+    deleteBg.className = 'rec-card-delete-bg';
+    deleteBg.innerHTML = '<span class="rec-card-delete-icon">✕</span><span class="rec-card-delete-label">Delete</span>';
+
+    const card = document.createElement('div');
+    card.className = 'rec-card';
+    card.innerHTML = `
+      <div class="rec-card-header" onclick="toggleRecCard(${ri})">
+        <div>
+          <div class="rec-date">${formatRecordDate(rec.date)}</div>
+          <div class="rec-progress-bar-wrap" style="margin-top:5px;">
+            <div class="rec-progress-bar" style="width:${pct}%"></div>
+          </div>
+        </div>
+        <div class="rec-summary">
+          <div class="rec-done-badge">${done}/${total} done</div>
+          <div class="rec-chevron">▼</div>
+        </div>
+      </div>
+      <div class="rec-body" id="recBody${ri}">
+        ${rec.wakeTarget || rec.wake ? `
+        <div class="rec-wake-row">
+          ${rec.wakeTarget ? `<div class="rec-wake-item">Target <span>${fmt12(rec.wakeTarget)}</span></div>` : ''}
+          ${rec.wake ? `<div class="rec-wake-item">Woke <span>${fmt12(rec.wake)}</span></div>` : ''}
+        </div>` : ''}
+        <div class="rec-section-label">Non-Negotiables</div>
+        ${(rec.mustsList || []).map((t, i) => {
+          const d = !!(rec.musts && rec.musts[i]);
+          return `<div class="rec-task-row">
+            <div class="rec-tick ${d ? 'done' : 'miss'}">${d ? '✓' : ''}</div>
+            <div class="rec-task-name ${d ? '' : 'miss'}">${escHtml(t)}</div>
+          </div>`;
+        }).join('')}
+        <div class="rec-section-label">Morning Protocol</div>
+        ${(rec.protocolList || []).map((t, i) => {
+          const d = !!(rec.protocol && rec.protocol[i]);
+          return `<div class="rec-task-row">
+            <div class="rec-tick ${d ? 'done' : 'miss'}">${d ? '✓' : ''}</div>
+            <div class="rec-task-name ${d ? '' : 'miss'}">${escHtml(t)}</div>
+          </div>`;
+        }).join('')}
+        <div class="rec-scores-row">
+          <div class="rec-score-item"><div class="rec-score-label">Productivity</div><div class="rec-score-val">${rec.prod > 0 ? rec.prod + '/10' : '–'}</div></div>
+          <div class="rec-score-item"><div class="rec-score-label">Mood</div><div class="rec-score-val">${rec.mood > 0 ? rec.mood + '/10' : '–'}</div></div>
+          ${rec.executedAt ? `<div class="rec-score-item--executed"><div class="rec-score-label">Executed</div><div class="rec-score-val">${rec.executedAt}</div></div>` : ''}
+        </div>
+        ${rec.notes ? `<div class="rec-notes-text">${escHtml(rec.notes)}</div>` : ''}
+        ${rec.improvements ? `<div class="rec-notes-text rec-improvements-text">↑ ${escHtml(rec.improvements)}</div>` : ''}
+      </div>
+    `;
+
+    wrap.appendChild(deleteBg);
+    wrap.appendChild(card);
+    body.appendChild(wrap);
+    attachSwipe(wrap, card, rec.date);
+  });
+}
+
+function toggleRecCard(ri) {
+  const body = document.getElementById('recBody' + ri);
+  if (!body) return;
+  const card = body.closest('.rec-card');
+  card.classList.toggle('expanded');
+}
+
+// ─── Past date detection & footer button ────────────────────────────────────
+function isPastDate() {
+  return dateToKey(selectedDate) < todayKey();
+}
+
+function updateFooterBtn() {
+  const btn = document.getElementById('newDayBtn');
+  if (isPastDate()) {
+    btn.textContent = '↓ Save Record';
+    btn.onclick = saveRecordForDate;
+  } else {
+    btn.textContent = '↺ New Day';
+    btn.onclick = resetDay;
+  }
+}
+
+function saveRecordForDate() {
+  const dateKey = dateToKey(selectedDate);
+  const snap = {
+    date: dateKey,
+    musts: {...state.musts},
+    protocol: {...state.protocol},
+    mustsList: [...(state.mustsList || [])],
+    protocolList: [...(state.protocolList || [])],
+    prod: state.prod,
+    mood: state.mood,
+    notes: state.notes,
+    improvements: state.improvements,
+    wake: state.wake,
+    wakeTarget: state.wakeTarget,
+    executedAt: (() => {
+      const n = new Date();
+      const h = n.getHours(), m = n.getMinutes();
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ampm}`;
+    })()
+  };
+  saveRecord(snap);
+  const btn = document.getElementById('newDayBtn');
+  const orig = btn.textContent;
+  btn.textContent = '✓ Saved';
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
+// ─── Sync dot helper ────────────────────────────────────────────────────────
+let syncDotTimer = null;
+function syncDot(status) {
+  const dot = document.getElementById('syncDot');
+  if (!dot) return;
+  dot.className = 'sync-dot ' + status;
+  clearTimeout(syncDotTimer);
+  if (status === 'synced') {
+    syncDotTimer = setTimeout(() => { dot.className = 'sync-dot'; }, 2000);
+  }
+}
+
+// ─── Boot: pull from Firebase first, then render ────────────────────────────
+async function boot() {
+  initHeader();
+
+  // Try to pull latest state from Firebase
+  if (window._fb) {
+    syncDot('syncing');
+    try {
+      // Load state from Firebase
+      const fbState = await window._fb.loadState();
+      if (fbState) {
+        const today = todayKey();
+        if (fbState.date === today) {
+          // Firebase has today's data — use it (more up to date than localStorage)
+          state = fbState;
+          if (!state.mustsList) state.mustsList = [...DEFAULT_MUSTS];
+          if (!state.protocolList) state.protocolList = [...DEFAULT_PROTOCOL];
+          localStorage.setItem('morningPlannerV2', JSON.stringify(state));
+        } else if (fbState.date < today) {
+          // Firebase has an older date — preserve task lists, reset checks
+          const fresh = defaultState();
+          if (fbState.mustsList) fresh.mustsList = fbState.mustsList;
+          if (fbState.protocolList) fresh.protocolList = fbState.protocolList;
+          state = fresh;
+          localStorage.setItem('morningPlannerV2', JSON.stringify(state));
+        }
+      }
+
+      // Load records from Firebase and merge into localStorage
+      await loadRecordsFromFirebase();
+
+      syncDot('synced');
+    } catch(e) {
+      syncDot('error');
+      console.warn('Firebase boot failed, using local data', e);
+    }
+  }
+
+  updateWakeDisplay();
+  updateTargetDisplay();
+  renderAll();
+}
+
+// Boot only after Firebase auth confirms the user
+// Use flag check in case fbReady fired before this script ran
+if (window._fbReady) {
+  boot();
+} else {
+  window.addEventListener('fbReady', () => boot());
+}
+</script>
+</body>
+</html>
