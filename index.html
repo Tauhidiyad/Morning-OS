@@ -237,11 +237,10 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut }
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-  const ALLOWED_EMAIL = "Tauhidiyad@gmail.com";
-  const MAIN_PAGE     = "https://tauhidiyad.github.io/Morning-OS/Morning-Os_Firebase_Final.html";
+  const MAIN_PAGE = "https://tauhidiyad.github.io/Morning-OS/Morning-Os_Firebase_Final.html";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBut2P7iYJM9WNJyTLY7VlRyc-B9ScKOlk",
@@ -256,15 +255,10 @@
   const auth     = getAuth(app);
   const provider = new GoogleAuthProvider();
 
-  // If already signed in as the right person, go straight to app
+  // Any signed-in user goes straight to the app
   onAuthStateChanged(auth, (user) => {
     if (user) {
-      if (user.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
-        window.location.replace(MAIN_PAGE);
-      } else {
-        signOut(auth);
-        showError("Access denied. This app is private.");
-      }
+      window.location.replace(MAIN_PAGE);
     }
   });
 
