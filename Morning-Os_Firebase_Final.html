@@ -10,8 +10,6 @@
   import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-  const ALLOWED_EMAIL = "tauhidiyad@gmail.com";
-
   const firebaseConfig = {
     apiKey: "AIzaSyBut2P7iYJM9WNJyTLY7VlRyc-B9ScKOlk",
     authDomain: "morning-os07.firebaseapp.com",
@@ -24,39 +22,41 @@
   const app  = initializeApp(firebaseConfig);
   const db   = getFirestore(app);
   const auth = getAuth(app);
-  const USER_ID = 'user_main';
 
   onAuthStateChanged(auth, (user) => {
-    // Not signed in or wrong account → kick to login
-    if (!user || user.email.toLowerCase() !== ALLOWED_EMAIL) {
+    // Not signed in → kick to login
+    if (!user) {
       window.location.replace("https://tauhidiyad.github.io/Morning-OS/index.html");
       return;
     }
 
-    // ✅ Correct user — set up Firebase helpers
+    // ✅ Use the real Firebase UID — unique per user, auto set
+    const USER_ID = user.uid;
+
+    // ✅ Each user's data lives under: users/{uid}/state & users/{uid}/records/{date}
     window._fb = {
       async saveState(stateObj) {
-        try { await setDoc(doc(db, USER_ID, 'state'), stateObj); }
+        try { await setDoc(doc(db, 'users', USER_ID, 'data', 'state'), stateObj); }
         catch(e) { console.warn('FB saveState failed', e); }
       },
       async loadState() {
         try {
-          const snap = await getDoc(doc(db, USER_ID, 'state'));
+          const snap = await getDoc(doc(db, 'users', USER_ID, 'data', 'state'));
           return snap.exists() ? snap.data() : null;
         } catch(e) { console.warn('FB loadState failed', e); return null; }
       },
       async saveRecord(rec) {
-        // doc path: collection='records', document=USER_ID_date (2 segments = valid)
-        await setDoc(doc(db, 'records', USER_ID + '_' + rec.date), rec);
+        // doc path: users/{uid}/records/{date}
+        await setDoc(doc(db, 'users', USER_ID, 'records', rec.date), rec);
       },
       async loadRecords() {
         try {
-          const snap = await getDocs(collection(db, 'records'));
+          const snap = await getDocs(collection(db, 'users', USER_ID, 'records'));
           return snap.docs.map(d => d.data()).filter(r => r.date);
         } catch(e) { console.warn('FB loadRecords failed', e); return null; }
       },
       async deleteRecord(date) {
-        try { await deleteDoc(doc(db, 'records', USER_ID + '_' + date)); }
+        try { await deleteDoc(doc(db, 'users', USER_ID, 'records', date)); }
         catch(e) { console.warn('FB deleteRecord failed', e); }
       }
     };
